@@ -4,7 +4,7 @@ trainer_params :
   'print_results_every_n_epochs': 1
   'save_model': False
   'load_previous_model': False
-  'load_model_path': 'Code_to_submit/models_saved/test.pt'
+  'load_model_path': null 
   'choose_best_model_on': 'train_loss'
   'epochs_between_save': 5  # Save if cost improved, and at least this number of epochs have passed
 

@@ -1,13 +1,14 @@
 from shared_imports import *
 from environment import *
 from loss_functions import *
+import json
 
 class Trainer():
     """
     Trainer class
     """
 
-    def __init__(self,  device='cpu'):
+    def __init__(self,  device='cpu', underage_cost=None):
         
         self.all_train_losses = []
         self.all_dev_losses = []
@@ -15,6 +16,7 @@ class Trainer():
         self.device = device
         self.time_stamp = self.get_time_stamp()
         self.best_performance_data = {'train_loss': np.inf, 'dev_loss': np.inf, 'last_epoch_saved': -1000, 'model_params_to_save': None}
+        self.underage_cost = underage_cost
     
     def reset(self):
         """
@@ -59,10 +61,15 @@ class Trainer():
             and the metric to use for choosing the best model
         """
 
+        self.all_train_revenues = []
+        self.all_train_holding_costs = []
+        self.all_dev_revenues = []
+        self.all_dev_holding_costs = []
+
         for epoch in range(epochs): # Make multiple passes through the dataset
             
             # Do one epoch of training, including updating the model parameters
-            average_train_loss, average_train_loss_to_report = self.do_one_epoch(
+            train_metrics = self.do_one_epoch(
                 optimizer, 
                 data_loaders['train'], 
                 loss_function, 
@@ -73,12 +80,15 @@ class Trainer():
                 observation_params, 
                 train=True, 
                 ignore_periods=params_by_dataset['train']['ignore_periods']
-                )
+            )
+            average_train_loss, average_train_loss_to_report, train_revenue, train_holding_costs = train_metrics
             
             self.all_train_losses.append(average_train_loss_to_report)
+            self.all_train_revenues.append(train_revenue)
+            self.all_train_holding_costs.append(train_holding_costs)
 
             if epoch % trainer_params['do_dev_every_n_epochs'] == 0:
-                average_dev_loss, average_dev_loss_to_report = self.do_one_epoch(
+                dev_metrics = self.do_one_epoch(
                     optimizer, 
                     data_loaders['dev'], 
                     loss_function, 
@@ -90,8 +100,11 @@ class Trainer():
                     train=False, 
                     ignore_periods=params_by_dataset['dev']['ignore_periods']
                     )
-                
+                average_dev_loss, average_dev_loss_to_report, dev_revenue, dev_holding_costs = dev_metrics
+            
                 self.all_dev_losses.append(average_dev_loss_to_report)
+                self.all_dev_revenues.append(dev_revenue)
+                self.all_dev_holding_costs.append(dev_holding_costs)
 
                 # Check if the current model is the best model so far, and save the model parameters if so.
                 # Save the model if specified in the trainer_params
@@ -100,22 +113,38 @@ class Trainer():
             else:
                 average_dev_loss, average_dev_loss_to_report = 0, 0
                 self.all_dev_losses.append(self.all_dev_losses[-1])
-
+                self.all_dev_revenues.append(self.all_dev_revenues[-1])
+                self.all_dev_holding_costs.append(self.all_dev_holding_costs[-1])
 
             # Print epoch number and average per-period loss every 10 epochs
             if epoch % trainer_params['print_results_every_n_epochs'] == 0:
-                print(f'epoch: {epoch + 1}')
-                print(f'Average per-period train loss: {average_train_loss_to_report}')
-                print(f'Average per-period dev loss: {average_dev_loss_to_report}')
-                print(f'Best per-period dev loss: {self.best_performance_data["dev_loss"]}')
+                print(f'Epoch: {epoch + 1}')
+                print(f'Train - Loss: {average_train_loss_to_report:.2f}, Revenue: {train_revenue:.2f}, Holding Costs: {train_holding_costs:.2f}')
+                if epoch % trainer_params['do_dev_every_n_epochs'] == 0:
+                    print(f'Dev - Loss: {average_dev_loss_to_report:.2f}, Revenue: {dev_revenue:.2f}, Holding Costs: {dev_holding_costs:.2f}')
+        
+        metrics = {
+            'train': {
+                'losses': self.all_train_losses,
+                'revenues': self.all_train_revenues,
+                'holding_costs': self.all_train_holding_costs
+            },
+            'dev': {
+                'losses': self.all_dev_losses,
+                'revenues': self.all_dev_revenues,
+                'holding_costs': self.all_dev_holding_costs
+            }
+        }
+        self.save_metrics_to_json(trainer_params, metrics)
+
     
-    def test(self, loss_function, simulator, model, data_loaders, optimizer, problem_params, observation_params, params_by_dataset, discrete_allocation=False):
+    def test(self, loss_function, simulator, model, data_loaders, optimizer, problem_params, observation_params, params_by_dataset, trainer_params, discrete_allocation=False):
 
         if model.trainable and self.best_performance_data['model_params_to_save'] is not None:
             # Load the parameter weights that gave the best performance on the specified dataset
             model.load_state_dict(self.best_performance_data['model_params_to_save'])
 
-        average_test_loss, average_test_loss_to_report = self.do_one_epoch(
+        test_metrics = self.do_one_epoch(
                 optimizer, 
                 data_loaders['test'], 
                 loss_function, 
@@ -127,9 +156,20 @@ class Trainer():
                 train=True, 
                 ignore_periods=params_by_dataset['test']['ignore_periods'],
                 discrete_allocation=discrete_allocation
-                )
+            )
         
-        return average_test_loss, average_test_loss_to_report
+
+        # Save test metrics
+        metrics = {
+            'test': {
+                'loss': float(test_metrics[0]),
+                'revenue': float(test_metrics[2]),
+                'holding_costs': float(test_metrics[3])
+            }
+        }
+        self.save_metrics_to_json(trainer_params, metrics, is_training=False)
+        
+        return test_metrics
 
     def do_one_epoch(self, optimizer, data_loader, loss_function, simulator, model, periods, problem_params, observation_params, train=True, ignore_periods=0, discrete_allocation=False):
         """
@@ -138,6 +178,8 @@ class Trainer():
         
         epoch_loss = 0
         epoch_loss_to_report = 0  # Loss ignoring the first 'ignore_periods' periods
+        epoch_revenue = 0
+        epoch_holding_costs = 0
         total_samples = len(data_loader.dataset)
         periods_tracking_loss = periods - ignore_periods  # Number of periods for which we report the loss
 
@@ -149,11 +191,14 @@ class Trainer():
                 optimizer.zero_grad()
 
             # Forward pass
-            total_reward, reward_to_report = self.simulate_batch(
+            total_reward, reward_to_report, revenue, holding_costs = self.simulate_batch(
                 loss_function, simulator, model, periods, problem_params, data_batch, observation_params, ignore_periods, discrete_allocation
                 )
             epoch_loss += total_reward.item()  # Rewards from period 0
             epoch_loss_to_report += reward_to_report.item()  # Rewards from period ignore_periods onwards
+            epoch_revenue += revenue.item()
+            epoch_holding_costs += holding_costs.item()
+
             
             mean_loss = total_reward/(len(data_batch['demands'])*periods*problem_params['n_stores'])
             
@@ -162,7 +207,18 @@ class Trainer():
                 mean_loss.backward()
                 optimizer.step()
         
-        return epoch_loss/(total_samples*periods*problem_params['n_stores']), epoch_loss_to_report/(total_samples*periods_tracking_loss*problem_params['n_stores'])
+        # return epoch_loss/(total_samples*periods*problem_params['n_stores']), epoch_loss_to_report/(total_samples*periods_tracking_loss*problem_params['n_stores'])
+            # Calculate normalized metrics
+        norm_factor = total_samples * periods_tracking_loss * problem_params['n_stores']
+        metrics = {
+            'loss': epoch_loss/(total_samples*periods*problem_params['n_stores']),
+            'loss_report': epoch_loss_to_report/norm_factor,
+            'revenue': epoch_revenue/norm_factor,
+            'holding_costs': epoch_holding_costs/norm_factor
+        }
+        
+        return metrics['loss'], metrics['loss_report'], metrics['revenue'], metrics['holding_costs']
+
     
     def simulate_batch(self, loss_function, simulator, model, periods, problem_params, data_batch, observation_params, ignore_periods=0, discrete_allocation=False):
         """
@@ -172,6 +228,9 @@ class Trainer():
         # Initialize reward across batch
         batch_reward = 0
         reward_to_report = 0
+        revenue_to_report = 0
+        holding_costs_to_report = 0
+
 
         observation, _ = simulator.reset(periods, problem_params, data_batch, observation_params)
         for t in range(periods):
@@ -194,18 +253,22 @@ class Trainer():
             batch_reward += total_reward
             if t >= ignore_periods:
                 reward_to_report += total_reward
+                revenue_to_report += observation['_revenue'].sum()
+                holding_costs_to_report += observation['_holding_costs'].sum()
+
             
             if terminated:
                 break
 
         # Return reward
-        return batch_reward, reward_to_report
+        return batch_reward, reward_to_report, revenue_to_report, holding_costs_to_report
 
     def save_model(self, epoch, model, optimizer, trainer_params):
 
         path = self.create_many_folders_if_not_exist_and_return_path(base_dir=trainer_params['base_dir'], 
                                                                      intermediate_folder_strings=trainer_params['save_model_folders']
                                                                      )
+        underage_cost = f"_{self.underage_cost}" if self.underage_cost else ""
         torch.save({
                     'epoch': epoch,
                     'model_state_dict': self.best_performance_data['model_params_to_save'],
@@ -218,7 +281,7 @@ class Trainer():
                     'all_test_losses': self.all_test_losses,
                     'warehouse_upper_bound': model.warehouse_upper_bound
                     }, 
-                    f"{path}/{trainer_params['save_model_filename']}.pt"
+                    f"{path}/{trainer_params['save_model_filename']}{underage_cost}.pt"
                     )
     
     def create_folder_if_not_exists(self, folder):
@@ -306,3 +369,15 @@ class Trainer():
 
         ct = datetime.datetime.now()
         return f"{ct.year}_{ct.month:02d}_{ct.day:02d}"
+    
+    def save_metrics_to_json(self, trainer_params, metrics_dict, is_training=True):
+        """Save metrics to a JSON file."""
+        path = self.create_many_folders_if_not_exist_and_return_path(
+            base_dir=trainer_params['base_dir'],
+            intermediate_folder_strings=trainer_params['save_model_folders']
+        )
+        
+        underage_cost = f"_{self.underage_cost}" if self.underage_cost else ""
+        phase = "train" if is_training else "test"
+        with open(f"{path}/{trainer_params['save_model_filename']}{underage_cost}_metrics_{phase}.json", 'w') as f:
+            json.dump(metrics_dict, f, indent=4)

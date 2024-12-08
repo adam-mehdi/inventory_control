@@ -186,6 +186,18 @@ class Simulator(gym.Env):
         
         post_inventory_on_hand = self.observation['store_inventories'][:, :, 0] - current_demands
 
+        # ============== LOGGING PROFIT ==============
+        # Calculate components separately
+        sales = torch.minimum(inventory_on_hand, current_demands)
+        revenue = observation['underage_costs'] * sales  # This is positive revenue
+        holding_costs = observation['holding_costs'] * torch.clip(post_inventory_on_hand, min=0)
+
+        # Store the components in observation for logging
+        observation['_revenue'] = revenue.sum(dim=1)  # Sum across stores
+        observation['_holding_costs'] = holding_costs.sum(dim=1)  # Sum across stores
+        # =============================================
+
+
         # Reward given by -sales*price + holding_costs
         if maximize_profit:
             reward = (

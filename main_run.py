@@ -128,7 +128,7 @@ if train_or_test == 'train':
 
 elif train_or_test in ['test', 'train']:
     # Deploy on test set, and enforce discrete allocation if the demand is poisson
-    average_test_loss, average_test_loss_to_report = trainer.test(
+    test_metrics = trainer.test(
         loss_function, 
         simulator, 
         model, 
@@ -137,10 +137,11 @@ elif train_or_test in ['test', 'train']:
         problem_params, 
         observation_params, 
         params_by_dataset, 
-        discrete_allocation=store_params['demand']['distribution'] == 'poisson'
+        discrete_allocation=store_params['demand']['distribution'] == 'poisson',
+        trainer_params=trainer_params
         )
 
-    print(f'Average per-period test loss: {average_test_loss_to_report}')
+    print(f'Average per-period test loss: {test_metrics[1]}')
 
 else:
     print(f'Invalid argument: {train_or_test}')

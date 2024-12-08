@@ -1,0 +1,35 @@
+
+Running configuration: config_files/policies_and_hyperparams/capped_base_stock.yml with underage cost 2
+Epoch: 1
+Train - Loss: -0.59, Revenue: 0.61, Holding Costs: 0.03
+Dev - Loss: -1.35, Revenue: 1.38, Holding Costs: 0.03
+Epoch: 11
+Train - Loss: -11.21, Revenue: 13.02, Holding Costs: 1.81
+Dev - Loss: -11.77, Revenue: 13.71, Holding Costs: 1.94
+Epoch: 21
+Train - Loss: -14.90, Revenue: 20.57, Holding Costs: 5.68
+Dev - Loss: -14.75, Revenue: 20.81, Holding Costs: 6.06
+Epoch: 31
+Train - Loss: -15.36, Revenue: 23.51, Holding Costs: 8.15
+Dev - Loss: -14.91, Revenue: 23.47, Holding Costs: 8.56
+Epoch: 41
+Train - Loss: -15.39, Revenue: 24.26, Holding Costs: 8.87
+Dev - Loss: -14.88, Revenue: 24.15, Holding Costs: 9.27
+Epoch: 51
+Train - Loss: -15.38, Revenue: 24.43, Holding Costs: 9.05
+Dev - Loss: -14.86, Revenue: 24.27, Holding Costs: 9.42
+Epoch: 61
+Train - Loss: -15.40, Revenue: 24.42, Holding Costs: 9.01
+Dev - Loss: -14.86, Revenue: 24.26, Holding Costs: 9.40
+Epoch: 71
+Train - Loss: -15.39, Revenue: 24.42, Holding Costs: 9.03
+Dev - Loss: -14.87, Revenue: 24.27, Holding Costs: 9.40
+Epoch: 81
+Train - Loss: -15.38, Revenue: 24.39, Holding Costs: 9.01
+Dev - Loss: -14.85, Revenue: 24.25, Holding Costs: 9.40
+Epoch: 91
+Train - Loss: -15.40, Revenue: 24.40, Holding Costs: 9.00
+Dev - Loss: -14.87, Revenue: 24.25, Holding Costs: 9.37
+Epoch: 101
+Train - Loss: -15.40, Revenue: 24.42, Holding Costs: 9.02
+Dev - Loss: -14.86, Revenue: 24.26, Holding Costs: 9.40

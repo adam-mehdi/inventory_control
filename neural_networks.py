@@ -195,6 +195,92 @@ class VanillaOneStore(MyNeuralNetwork):
 
         return {'stores': x}
 
+class LearnBaseStock(MyNeuralNetwork):
+    """
+    Neural network that learns base-stock levels from context,
+    then computes orders as max(S - I, 0)
+    """
+    
+    def forward(self, observation):
+        """
+        Get base-stock level from the neural network,
+        then compute order quantity as max(S - I, 0)
+        
+        Parameters
+        ----------
+        observation: dict
+            Dictionary containing store_inventories and other state information
+        
+        Returns
+        -------
+        dict
+            Dictionary with computed store orders
+        """
+        x = observation['store_inventories']
+        
+        # Sum across all dimensions except batch to get total inventory position
+        inv_pos = x.sum(dim=2)
+        
+        # Get context vector from flattened input
+        input_tensor = x.flatten(start_dim=1)
+        
+        # Pass through network to get base-stock level
+        # Add 1 and apply softplus to ensure base-stock level is positive
+        base_stock = self.net['master'](input_tensor) + 1
+        base_stock = self.activation_functions['softplus'](base_stock)
+        
+        # Compute order quantity as max(S - I, 0)
+        order_quantity = torch.clip(base_stock - inv_pos, min=0)
+        
+        return {'stores': order_quantity}
+
+class CyclicBaseStock(MyNeuralNetwork):
+    """
+    Implementation of an (S^t) policy with 52-week cyclical base-stock levels.
+    Instead of learning a single base-stock level, learns 52 different levels
+    that repeat annually.
+    """
+    
+    def forward(self, observation):
+        """
+        Get the appropriate base-stock level for the current period,
+        then compute order quantity as max(S_t - I, 0)
+        
+        Parameters
+        ----------
+        observation: dict
+            Must contain:
+            - store_inventories: Current inventory levels
+            - current_period: The current time period
+        
+        Returns
+        -------
+        dict
+            Dictionary with computed store orders
+        """
+        # Get current inventory and period
+        x = observation['store_inventories']
+        current_period = observation['current_period']
+        
+        # Calculate inventory position
+        inv_pos = x.sum(dim=2)
+        
+        # Get all 52 base-stock levels from the network
+        # Add 1 and apply softplus to ensure they're positive
+        base_stock_levels = self.net['master'](torch.tensor([0.0]).to(self.device)) + 1
+        base_stock_levels = self.activation_functions['softplus'](base_stock_levels)
+        
+        # Convert current period to week number (0-51)
+        week_indices = (current_period % 52).long()
+        
+        # Select the appropriate base-stock level for each sample's current period
+        current_base_stock = base_stock_levels[week_indices]
+        
+        # Compute order quantity as max(S_t - I, 0)
+        order_quantity = torch.clip(current_base_stock - inv_pos, min=0)
+        
+        return {'stores': order_quantity}
+
 class BaseStock(MyNeuralNetwork):
     """
     Base stock policy
@@ -461,6 +547,7 @@ class QuantilePolicy(MyNeuralNetwork):
         quantile_forecaster = FullyConnectedForecaster([128, 128], lead_times=nn_params['forecaster_lead_times'], qs=np.arange(0.05, 1, 0.05))
         quantile_forecaster = quantile_forecaster
         quantile_forecaster.load_state_dict(torch.load(f"{nn_params['forecaster_location']}"))
+
         
         # Set requires_grad to False for all parameters if we are not training the forecaster
         for p in quantile_forecaster.parameters():
@@ -609,6 +696,8 @@ class NeuralNetworkCreator:
 
         architectures = {
             'vanilla_one_store': VanillaOneStore, 
+            'learn_base_stock': LearnBaseStock, 
+            'cyclic_base_stock': CyclicBaseStock,
             'base_stock': BaseStock,
             'capped_base_stock': CappedBaseStock,
             'echelon_stock': EchelonStock,

@@ -1,0 +1,24 @@
+trainer_params:
+  'epochs': 200
+  'do_dev_every_n_epochs': 1
+  'print_results_every_n_epochs': 10
+  'save_model': True
+  'load_previous_model': False
+  'load_model_path': null
+  'choose_best_model_on': 'dev_loss'
+  'epochs_between_save': 5
+
+optimizer_params:
+  'learning_rate': 0.003
+
+nn_params:
+  'name': 'learn_base_stock'
+  'neurons_per_hidden_layer':
+    'master': [32, 32, 32]
+  'inner_layer_activations':
+    'master': 'elu'
+  'output_layer_activation':
+    'master': null
+  'initial_bias': null
+  'output_sizes':
+    'master': 1
