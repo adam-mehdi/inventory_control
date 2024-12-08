@@ -41,8 +41,110 @@ def run_single_config(config_setting_file, config_hyperparams_file, n_samples=No
     trainer_params, optimizer_params, nn_params = [config_hyperparams[key] for key in hyperparams_keys]
     observation_params = DefaultDict(lambda: None, observation_params)
 
-    # Rest of the original function remains the same
-    # ... (keep all the existing code for dataset creation, model setup, training, and testing)
+    # Setup device
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    dataset_creator = DatasetCreator()
+
+    # Create datasets
+    if sample_data_params['split_by_period']:
+        scenario = Scenario(
+            periods=None,
+            problem_params=problem_params,
+            store_params=store_params,
+            warehouse_params=warehouse_params,
+            echelon_params=echelon_params,
+            num_samples=params_by_dataset['train']['n_samples'],
+            observation_params=observation_params,
+            seeds=seeds
+        )
+        
+        train_dataset, dev_dataset, test_dataset = dataset_creator.create_datasets(
+            scenario,
+            split=True,
+            by_period=True,
+            periods_for_split=[sample_data_params[k] for k in ['train_periods', 'dev_periods', 'test_periods']],
+        )
+    else:
+        scenario = Scenario(
+            periods=params_by_dataset['train']['periods'],
+            problem_params=problem_params,
+            store_params=store_params,
+            warehouse_params=warehouse_params,
+            echelon_params=echelon_params,
+            num_samples=params_by_dataset['train']['n_samples'] + params_by_dataset['dev']['n_samples'],
+            observation_params=observation_params,
+            seeds=seeds
+        )
+
+        train_dataset, dev_dataset = dataset_creator.create_datasets(
+            scenario, split=True, by_sample_indexes=True, 
+            sample_index_for_split=params_by_dataset['dev']['n_samples']
+        )
+
+        scenario = Scenario(
+            params_by_dataset['test']['periods'],
+            problem_params,
+            store_params,
+            warehouse_params,
+            echelon_params,
+            params_by_dataset['test']['n_samples'],
+            observation_params,
+            test_seeds
+        )
+
+        test_dataset = dataset_creator.create_datasets(scenario, split=False)
+
+    # Create data loaders
+    train_loader = DataLoader(train_dataset, batch_size=params_by_dataset['train']['batch_size'], shuffle=True)
+    dev_loader = DataLoader(dev_dataset, batch_size=params_by_dataset['dev']['batch_size'], shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=params_by_dataset['test']['batch_size'], shuffle=False)
+    data_loaders = {'train': train_loader, 'dev': dev_loader, 'test': test_loader}
+
+    # Setup model
+    neural_net_creator = NeuralNetworkCreator
+    model = neural_net_creator().create_neural_network(scenario, nn_params, device=device)
+    
+    loss_function = PolicyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=optimizer_params['learning_rate'])
+    
+    simulator = Simulator(device=device)
+    trainer = Trainer(device=device, experiment_label="num_samples_{n_samples}")
+
+    # Setup save directories
+    trainer_params['base_dir'] = 'saved_models'
+    trainer_params['save_model_folders'] = [trainer.get_year_month_day(), nn_params['name']]
+    trainer_params['save_model_filename'] = trainer.get_time_stamp()
+
+    if trainer_params['load_previous_model']:
+        print(f'Loading model from {trainer_params["load_model_path"]}')
+        model, optimizer = trainer.load_model(model, optimizer, trainer_params['load_model_path'])
+
+    # Train
+    trainer.train(
+        trainer_params['epochs'],
+        loss_function, simulator,
+        model,
+        data_loaders,
+        optimizer,
+        problem_params,
+        observation_params,
+        params_by_dataset,
+        trainer_params
+    )
+
+    # Test
+    test_metrics = trainer.test(
+        loss_function,
+        simulator,
+        model,
+        data_loaders,
+        optimizer,
+        problem_params,
+        observation_params,
+        params_by_dataset,
+        trainer_params,
+        discrete_allocation=store_params['demand']['distribution'] == 'poisson',
+    )
 
     return {
         'config_name': config_hyperparams_file,
@@ -64,7 +166,7 @@ def main():
     ]
 
     # Define sample sizes to test (geometric progression)
-    sample_sizes = [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 32768]
+    sample_sizes = [512, 1024, 2048, 4096, 8192, 32768]
 
     # Run all configs with progress bar
     results = []

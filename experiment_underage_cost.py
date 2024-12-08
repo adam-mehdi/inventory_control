@@ -105,7 +105,7 @@ def run_single_config(config_setting_file, config_hyperparams_file, underage_cos
     optimizer = torch.optim.Adam(model.parameters(), lr=optimizer_params['learning_rate'])
     
     simulator = Simulator(device=device)
-    trainer = Trainer(device=device, underage_cost=underage_cost)
+    trainer = Trainer(device=device, experiment_label=f"underage_cost_{underage_cost}")
 
     # Setup save directories
     trainer_params['base_dir'] = 'saved_models'

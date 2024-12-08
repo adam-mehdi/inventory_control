@@ -8,7 +8,7 @@ class Trainer():
     Trainer class
     """
 
-    def __init__(self,  device='cpu', underage_cost=None):
+    def __init__(self,  device='cpu', experiment_label=None):
         
         self.all_train_losses = []
         self.all_dev_losses = []
@@ -16,7 +16,7 @@ class Trainer():
         self.device = device
         self.time_stamp = self.get_time_stamp()
         self.best_performance_data = {'train_loss': np.inf, 'dev_loss': np.inf, 'last_epoch_saved': -1000, 'model_params_to_save': None}
-        self.underage_cost = underage_cost
+        self.experiment_label = experiment_label
     
     def reset(self):
         """
@@ -268,7 +268,7 @@ class Trainer():
         path = self.create_many_folders_if_not_exist_and_return_path(base_dir=trainer_params['base_dir'], 
                                                                      intermediate_folder_strings=trainer_params['save_model_folders']
                                                                      )
-        underage_cost = f"_{self.underage_cost}" if self.underage_cost else ""
+        experiment_label = f"_{self.experiment_label}" if self.experiment_label else ""
         torch.save({
                     'epoch': epoch,
                     'model_state_dict': self.best_performance_data['model_params_to_save'],
@@ -281,7 +281,7 @@ class Trainer():
                     'all_test_losses': self.all_test_losses,
                     'warehouse_upper_bound': model.warehouse_upper_bound
                     }, 
-                    f"{path}/{trainer_params['save_model_filename']}{underage_cost}.pt"
+                    f"{path}/{trainer_params['save_model_filename']}{experiment_label}.pt"
                     )
     
     def create_folder_if_not_exists(self, folder):
@@ -377,7 +377,7 @@ class Trainer():
             intermediate_folder_strings=trainer_params['save_model_folders']
         )
         
-        underage_cost = f"_{self.underage_cost}" if self.underage_cost else ""
+        experiment_label = f"_{self.experiment_label}" if self.experiment_label else ""
         phase = "train" if is_training else "test"
-        with open(f"{path}/{trainer_params['save_model_filename']}{underage_cost}_metrics_{phase}.json", 'w') as f:
+        with open(f"{path}/{trainer_params['save_model_filename']}{experiment_label}_metrics_{phase}.json", 'w') as f:
             json.dump(metrics_dict, f, indent=4)
