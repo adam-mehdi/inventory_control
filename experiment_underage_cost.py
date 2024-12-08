@@ -167,8 +167,8 @@ def main():
 
     # Run all configs with progress bar
     results = []
-    for cost in tqdm(underage_costs, desc="Testing underage costs"):
-        for config_file in tqdm(config_files, desc=f"Running policies (p={cost})", leave=False):
+    for cost in tqdm(underage_costs, desc="Outer Loop: Testing underage costs"):
+        for config_file in tqdm(config_files, desc=f"Inner Loop: Running policies (p={cost})", leave=False):
             print(f"\nRunning configuration: {config_file} with underage cost {cost}")
             result = run_single_config(config_setting_file, config_file, underage_cost=cost)
             results.append(result)
