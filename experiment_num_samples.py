@@ -108,7 +108,7 @@ def run_single_config(config_setting_file, config_hyperparams_file, n_samples=No
     optimizer = torch.optim.Adam(model.parameters(), lr=optimizer_params['learning_rate'])
     
     simulator = Simulator(device=device)
-    trainer = Trainer(device=device, experiment_label="num_samples_{n_samples}")
+    trainer = Trainer(device=device, experiment_label=f"num_samples_{n_samples}")
 
     # Setup save directories
     trainer_params['base_dir'] = 'saved_models'
@@ -166,7 +166,7 @@ def main():
     ]
 
     # Define sample sizes to test (geometric progression)
-    sample_sizes = [512, 1024, 2048, 4096, 8192, 32768]
+    sample_sizes = [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 32768]
 
     # Run all configs with progress bar
     results = []
