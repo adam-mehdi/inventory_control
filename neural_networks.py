@@ -677,6 +677,111 @@ class JustInTime(MyNeuralNetwork):
 
         return {"stores": torch.clip(future_demands, min=0)}
 
+
+class CyclicBaseStockQuarter(MyNeuralNetwork):
+    """
+    A variant of CyclicBaseStock that uses a quarterly cycle (13 weeks) 
+    instead of a full-year 52-week cycle. This may help the network capture 
+    shorter-term seasonal patterns.
+    """
+
+    def forward(self, observation):
+        """
+        Get the appropriate base-stock level for the current period from a 13-week cycle,
+        then compute order quantity as max(S_t - I, 0).
+        
+        Parameters
+        ----------
+        observation: dict
+            Must contain:
+            - store_inventories: Current inventory levels
+            - current_period: The current time period
+        """
+        x = observation['store_inventories']
+        current_period = observation['current_period']
+        
+        # Calculate inventory position
+        inv_pos = x.sum(dim=2)
+        
+        # Get all 13 base-stock levels from the network
+        # Add 1 and apply softplus to ensure positivity
+        # Note: Ensure that the network's output_sizes['master'] is set to 13 for this policy
+        base_stock_levels = self.net['master'](torch.tensor([0.0]).to(self.device)) + 1
+        base_stock_levels = self.activation_functions['softplus'](base_stock_levels)
+
+        # Convert current period to quarter-week index (0-12)
+        week_indices = (current_period % 13).long()
+        
+        # Select the appropriate base-stock level for each sample's current period
+        current_base_stock = base_stock_levels[week_indices]
+        
+        # Compute order quantity as max(S_t - I, 0)
+        order_quantity = torch.clip(current_base_stock - inv_pos, min=0)
+        
+        return {'stores': order_quantity}
+
+
+class CyclicCappedBaseStockYear(MyNeuralNetwork):
+    """
+    Learns both a cyclical base-stock level and a cyclical cap over a full-year (52-week) cycle.
+    Expected output_sizes['master'] = 104 (first 52 are base-stock levels, next 52 are caps).
+    """
+
+    def forward(self, observation):
+        """
+        Uses a 52-week cycle. For each sample, determine the current week index,
+        select the corresponding base-stock and cap from the network output,
+        and compute order quantity as min(max(S_t - I, 0), cap_t).
+        """
+        x = observation['store_inventories']
+        current_period = observation['current_period']
+
+        inv_pos = x.sum(dim=2)
+
+        # Get base-stock and cap arrays (length 52 each)
+        raw_outputs = self.net['master'](torch.tensor([0.0]).to(self.device)) + 1
+        raw_outputs = self.activation_functions['softplus'](raw_outputs)
+        base_stock_levels = raw_outputs[:52]
+        caps = raw_outputs[52:]
+
+        week_indices = (current_period % 52).long()
+        current_base_stock = base_stock_levels[week_indices]
+        current_cap = caps[week_indices]
+
+        order_quantity = torch.clip(current_base_stock - inv_pos, min=0, max=current_cap)
+        return {'stores': order_quantity}
+
+
+class CyclicCappedBaseStockQuarter(MyNeuralNetwork):
+    """
+    Learns both a cyclical base-stock level and a cyclical cap over a quarterly (13-week) cycle.
+    Expected output_sizes['master'] = 26 (first 13 are base-stock levels, next 13 are caps).
+    """
+
+    def forward(self, observation):
+        """
+        Uses a 13-week cycle. For each sample, determine the current week index in the quarter,
+        select the corresponding base-stock and cap from the network output,
+        and compute order quantity as min(max(S_t - I, 0), cap_t).
+        """
+        x = observation['store_inventories']
+        current_period = observation['current_period']
+
+        inv_pos = x.sum(dim=2)
+
+        # Get base-stock and cap arrays (length 13 each)
+        raw_outputs = self.net['master'](torch.tensor([0.0]).to(self.device)) + 1
+        raw_outputs = self.activation_functions['softplus'](raw_outputs)
+        base_stock_levels = raw_outputs[:13]
+        caps = raw_outputs[13:]
+
+        week_indices = (current_period % 13).long()
+        current_base_stock = base_stock_levels[week_indices]
+        current_cap = caps[week_indices]
+
+        order_quantity = torch.clip(current_base_stock - inv_pos, min=0, max=current_cap)
+        return {'stores': order_quantity}
+
 class NeuralNetworkCreator:
     """
     Class to create neural networks
@@ -698,6 +803,9 @@ class NeuralNetworkCreator:
             'vanilla_one_store': VanillaOneStore, 
             'learn_base_stock': LearnBaseStock, 
             'cyclic_base_stock': CyclicBaseStock,
+            'cyclic_capped_base_stock_quarter': CyclicCappedBaseStockQuarter,
+            'cyclic_capped_base_stock_year': CyclicCappedBaseStockYear,
+            'cyclic_base_stock_quarter': CyclicBaseStockQuarter,
             'base_stock': BaseStock,
             'capped_base_stock': CappedBaseStock,
             'echelon_stock': EchelonStock,
