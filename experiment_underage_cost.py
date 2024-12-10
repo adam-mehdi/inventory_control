@@ -154,12 +154,14 @@ def main():
     # List all config files
     config_setting_file = 'config_files/settings/one_store_real_data_lost_demand.yml'
     config_files = [
-        'config_files/policies_and_hyperparams/capped_base_stock.yml',
-        'config_files/policies_and_hyperparams/base_stock.yml',
-        'config_files/policies_and_hyperparams/vanilla_one_store.yml',
-        'config_files/policies_and_hyperparams/just_in_time.yml',
-        'config_files/policies_and_hyperparams/learn_base_stock.yml',
-        'config_files/policies_and_hyperparams/cyclic_base_stock.yml'
+        'config_files/policies_and_hyperparams/cyclic_base_stock_quarter.yml',
+        'config_files/policies_and_hyperparams/cyclic_capped_base_stock_quarter.yml',
+        'config_files/policies_and_hyperparams/cyclic_capped_base_stock_year.yml',
+        # 'config_files/policies_and_hyperparams/base_stock.yml',
+        # 'config_files/policies_and_hyperparams/vanilla_one_store.yml',
+        # 'config_files/policies_and_hyperparams/just_in_time.yml',
+        # 'config_files/policies_and_hyperparams/learn_base_stock.yml',
+        # 'config_files/policies_and_hyperparams/cyclic_base_stock.yml'
     ]
 
     # Define underage costs to test (p̂ values from the paper)
